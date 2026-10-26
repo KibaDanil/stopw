@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Секундомер · кёрлинг</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background: #111;
+    color: #e8e8e8;
+    min-height: 100vh;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    user-select: none;
+  }
+
+  /* Переключатель цветов — маленький, слева */
+  .colors {
+    display: flex;
+    gap: 8px;
+    align-self: flex-start;
+    margin-bottom: 14px;
+  }
+  .color-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color .15s, transform .15s;
+    outline: none;
+    padding: 0;
+  }
+  .color-btn:hover { transform: scale(1.12); }
+  .color-btn.active { border-color: #e8e8e8; }
+  .color-btn[data-color="green"]  { background: #2ecc71; }
+  .color-btn[data-color="blue"]   { background: #3a86ff; }
+  .color-btn[data-color="yellow"] { background: #ffd60a; }
+  .color-btn[data-color="red"]    { background: #e63946; }
+
+  /* Дисплей */
+  .display {
+    font-size: clamp(3.2rem, 13vw, 6rem);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+    margin: 6px 0 20px;
+    color: #fff;
+    text-align: center;
+    min-width: 60%;
+  }
+
+  /* Кнопки управления — всегда в одну строку */
+  .controls {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 22px;
+    width: 100%;
+    max-width: 420px;
+    justify-content: center;
+  }
+  button.action {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: .8rem;
+    font-weight: 600;
+    padding: 10px 4px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background .15s, opacity .15s;
+    background: #1c1c1c;
+    color: #e8e8e8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  button.action:hover:not(:disabled) { background: #2a2a2a; }
+  button.action:active:not(:disabled) { transform: scale(.97); }
+  button.action:disabled { opacity: .3; cursor: not-allowed; }
+  .btn-start { color: #2ecc71; }
+  .btn-stop  { color: #e63946; }
+  .btn-save  { color: #3a86ff; }
+  .btn-reset { color: #8892a6; }
+
+  /* Список сохранений — компактный */
+  .saved-list {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 16px;
+  }
+  .saved-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px 4px 0;
+    font-size: .85rem;
+    border-bottom: 1px solid #1c1c1c;
+  }
+  .saved-item .dot {
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .saved-item .time {
+    font-family: 'Courier New', monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    flex: 1;
+    color: #ccc;
+  }
+  .saved-item .del {
+    background: none;
+    border: none;
+    color: #555;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color .15s;
+  }
+  .saved-item .del:hover { color: #e63946; }
+
+  .btn-reset-all {
+    background: none;
+    color: #666;
+    border: 1px solid #2a2a2a;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: .78rem;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+    margin-top: auto;
+  }
+  .btn-reset-all:hover { color: #e63946; border-color: #e63946; }
+
+  .empty {
+    text-align: center;
+    color: #444;
+    font-size: .78rem;
+    padding: 6px;
+  }
+</style>
+</head>
+<body>
+
+  <!-- Переключатель цветов -->
+  <div class="colors" id="colors">
+    <button class="color-btn active" data-color="green"  aria-label="Зелёный"></button>
+    <button class="color-btn"        data-color="blue"   aria-label="Синий"></button>
+    <button class="color-btn"        data-color="yellow" aria-label="Жёлтый"></button>
+    <button class="color-btn"        data-color="red"    aria-label="Красный"></button>
+  </div>
+
+  <!-- Дисплей -->
+  <div class="display" id="display">00:00.00</div>
+
+  <!-- Кнопки управления -->
+  <div class="controls">
+    <button class="action btn-start" id="btnStart">Старт</button>
+    <button class="action btn-stop"  id="btnStop" disabled>Стоп</button>
+    <button class="action btn-save"  id="btnSave" disabled>Сохр.</button>
+    <button class="action btn-reset" id="btnReset">Сброс</button>
+  </div>
+
+  <!-- Сохранённые времена -->
+  <div class="saved-list" id="savedList">
+    <div class="empty" id="emptyMsg">Нет сохранённых времён</div>
+  </div>
+
+  <!-- Сброс всех -->
+  <button class="btn-reset-all" id="btnResetAll">Сбросить все</button>
+
+<script>
+(() => {
+  'use strict';
+
+  const COLOR_HEX = {
+    green:  '#2ecc71',
+    blue:   '#3a86ff',
+    yellow: '#ffd60a',
+    red:    '#e63946'
+  };
+  let selectedColor = 'green';
+
+  const displayEl  = document.getElementById('display');
+  const btnStart   = document.getElementById('btnStart');
+  const btnStop    = document.getElementById('btnStop');
+  const btnSave    = document.getElementById('btnSave');
+  const btnReset   = document.getElementById('btnReset');
+  const btnResetAll= document.getElementById('btnResetAll');
+  const savedList  = document.getElementById('savedList');
+  const emptyMsg   = document.getElementById('emptyMsg');
+  const colorBtns  = document.querySelectorAll('.color-btn');
+
+  let startTime   = 0;
+  let elapsed     = 0;
+  let running     = false;
+  let rafId       = null;
+  let hasStoppedTime = false;
+
+  let savedItems = [];
+
+  function format(ms) {
+    if (ms < 0) ms = 0;
+    const totalHundredths = Math.floor(ms / 10);
+    const hundredths = totalHundredths % 100;
+    const totalSeconds = Math.floor(totalHundredths / 100);
+    const seconds = totalSeconds % 60;
+    const minutes = Math.floor(totalSeconds / 60);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(minutes)}:${pad(seconds)}.${pad(hundredths)}`;
+  }
+
+  function getCurrentElapsed() {
+    return running ? elapsed + (performance.now() - startTime) : elapsed;
+  }
+
+  function updateDisplay() {
+    displayEl.textContent = format(getCurrentElapsed());
+  }
+
+  function tick() {
+    if (!running) return;
+    updateDisplay();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function start() {
+    if (running) return;
+    running = true;
+    startTime = performance.now();
+    btnStart.disabled = true;
+    btnStop.disabled = false;
+    btnSave.disabled = true;
+    hasStoppedTime = false;
+    tick();
+  }
+
+  function stop() {
+    if (!running) return;
+    running = false;
+    elapsed += performance.now() - startTime;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    updateDisplay();
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+    btnSave.disabled = false;
+    hasStoppedTime = true;
+  }
+
+  function save() {
+    if (running || !hasStoppedTime) return;
+    savedItems.push({
+      id: Date.now() + Math.random(),
+      ms: elapsed,
+      color: selectedColor
+    });
+    renderSaved();
+    resetTimer();
+  }
+
+  function resetTimer() {
+    running = false;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    elapsed = 0;
+    startTime = 0;
+    hasStoppedTime = false;
+    updateDisplay();
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+    btnSave.disabled = true;
+  }
+
+  function renderSaved() {
+    savedList.querySelectorAll('.saved-item').forEach(el => el.remove());
+    if (savedItems.length === 0) {
+      emptyMsg.style.display = 'block';
+      return;
+    }
+    emptyMsg.style.display = 'none';
+
+    const sorted = [...savedItems].reverse();
+    for (const item of sorted) {
+      const row = document.createElement('div');
+      row.className = 'saved-item';
+
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = COLOR_HEX[item.color];
+
+      const time = document.createElement('span');
+      time.className = 'time';
+      time.textContent = format(item.ms);
+
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '×';
+      del.title = 'Удалить';
+      del.addEventListener('click', () => {
+        savedItems = savedItems.filter(s => s.id !== item.id);
+        renderSaved();
+      });
+
+      row.appendChild(dot);
+      row.appendChild(time);
+      row.appendChild(del);
+      savedList.appendChild(row);
+    }
+  }
+
+  colorBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      colorBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedColor = btn.dataset.color;
+    });
+  });
+
+  btnStart.addEventListener('click', start);
+  btnStop.addEventListener('click', stop);
+  btnSave.addEventListener('click', save);
+  btnReset.addEventListener('click', resetTimer);
+
+  btnResetAll.addEventListener('click', () => {
+    if (savedItems.length === 0) return;
+    if (confirm('Удалить все сохранённые времена?')) {
+      savedItems = [];
+      renderSaved();
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !e.repeat) {
+      if (document.activeElement?.classList.contains('color-btn')) return;
+      e.preventDefault();
+      if (running) stop();
+      else if (!hasStoppedTime) start();
+    }
+    if (e.code === 'Enter' && hasStoppedTime && !running) {
+      e.preventDefault();
+      save();
+    }
+  });
+
+  updateDisplay();
+  renderSaved();
+})();
+</script>
+</body>
+</html>
