@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Секундомер</title>
     <style>
         * {
@@ -21,27 +21,27 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
-        body {
+        /* Фиксированный слой на весь экран — не зависит от адресной строки */
+        #app {
+            position: fixed;
+            inset: 0;
             display: flex;
-            /* Портрет: круги сверху и снизу */
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             gap: 2vmin;
             padding: 1vmin;
+            /* Портрет: круги друг над другом */
+            flex-direction: column;
         }
 
         @media (orientation: landscape) {
-            body {
+            #app {
+                /* Ландшафт: круги в ряд */
                 flex-direction: row;
             }
         }
 
         .circle {
-            /* Портрет: диаметр ограничен шириной и половиной высоты */
-            --size: min(96vw, 48vh);
-            width: var(--size);
-            height: var(--size);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -52,13 +52,6 @@
             touch-action: manipulation;
             overflow: hidden;
             flex: 0 0 auto;
-        }
-
-        @media (orientation: landscape) {
-            .circle {
-                /* Ландшафт: диаметр ограничен высотой и половиной ширины */
-                --size: min(48vw, 96vh);
-            }
         }
 
         .circle:active {
@@ -95,25 +88,16 @@
     </style>
 </head>
 <body>
-    <div class="circle blue" id="blueCircle">
-        <div class="time" id="blueTime">00.00</div>
-    </div>
-    <div class="circle red" id="redCircle">
-        <div class="time" id="redTime">00.00</div>
+    <div id="app">
+        <div class="circle blue" id="blueCircle">
+            <div class="time" id="blueTime">00.00</div>
+        </div>
+        <div class="circle red" id="redCircle">
+            <div class="time" id="redTime">00.00</div>
+        </div>
     </div>
 
     <script>
-        // Используем visualViewport для учёта реального размера видимой области
-        // (на мобильных адресная строка и панели браузера меняют высоту)
-        function applyViewportSize() {
-            const vv = window.visualViewport;
-            const w = vv ? vv.width : window.innerWidth;
-            const h = vv ? vv.height : window.innerHeight;
-            document.documentElement.style.setProperty('--vw', w + 'px');
-            document.documentElement.style.setProperty('--vh', h + 'px');
-        }
-        applyViewportSize();
-
         class Stopwatch {
             constructor(element) {
                 this.el = element;
@@ -169,34 +153,49 @@
             redSW.tap();
         });
 
-        // Размер кругов считаем от реальных размеров видимой области.
-        // Портрет: диаметр = min(ширина*0.96, (высота - зазор)*0.5)
-        // Ландшафт: диаметр = min((ширина - зазор)*0.5, высота*0.96)
-        function layout() {
-            const vw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vw')) || window.innerWidth;
-            const vh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vh')) || window.innerHeight;
-            const isLandscape = vw >= vh;
+        // Реальные размеры видимой области (учитывают адресную строку, панели, чёлку)
+        function getViewport() {
+            const vv = window.visualViewport;
+            const w = vv ? vv.width : window.innerWidth;
+            const h = vv ? vv.height : window.innerHeight;
+            const offsetTop = vv ? vv.offsetTop : 0;
+            const offsetLeft = vv ? vv.offsetLeft : 0;
+            return { w, h, offsetTop, offsetLeft };
+        }
 
-            // Отступы: 1vmin с каждой стороны (8px минимум) + зазор между кругами 2vmin
-            const pad = Math.max(8, Math.min(vw, vh) * 0.01);
-            const gap = Math.max(8, Math.min(vw, vh) * 0.02);
+        // Прибиваем #app к видимой области вручную — это единственный надёжный
+        // способ центрировать при любых состояниях адресной строки и поворотах
+        function layout() {
+            const { w, h, offsetTop, offsetLeft } = getViewport();
+
+            const app = document.getElementById('app');
+            app.style.left = offsetLeft + 'px';
+            app.style.top = offsetTop + 'px';
+            app.style.width = w + 'px';
+            app.style.height = h + 'px';
+
+            const isLandscape = w >= h;
+            const minSide = Math.min(w, h);
+            const pad = Math.max(6, minSide * 0.01);
+            const gap = Math.max(6, minSide * 0.02);
 
             let size;
             if (isLandscape) {
-                size = Math.min((vw - pad * 2 - gap) / 2, vh - pad * 2);
+                // Круги в ряд: 2 круга + зазор + отступы по бокам должны поместиться в ширину,
+                // и один круг — в высоту
+                size = Math.min((w - pad * 2 - gap) / 2, h - pad * 2);
             } else {
-                size = Math.min(vw - pad * 2, (vh - pad * 2 - gap) / 2);
+                // Круги в столбец: 2 круга + зазор + отступы сверху/снизу должны поместиться в высоту,
+                // и один круг — в ширину
+                size = Math.min(w - pad * 2, (h - pad * 2 - gap) / 2);
             }
             size = Math.max(40, Math.floor(size));
 
-            document.querySelectorAll('.circle').forEach(c => {
+            const circles = document.querySelectorAll('.circle');
+            circles.forEach(c => {
                 c.style.width = size + 'px';
                 c.style.height = size + 'px';
             });
-
-            // Выравнивание по центру именно видимой области
-            document.body.style.width = vw + 'px';
-            document.body.style.height = vh + 'px';
 
             fitText();
         }
@@ -204,10 +203,14 @@
         function fitText() {
             document.querySelectorAll('.circle').forEach(circle => {
                 const timeEl = circle.querySelector('.time');
-                const maxWidth = circle.clientWidth * 0.80;
-                const maxHeight = circle.clientHeight * 0.80;
+                const cw = circle.clientWidth;
+                const ch = circle.clientHeight;
+                if (!cw || !ch) return;
 
-                let size = circle.clientHeight * 0.25;
+                const maxWidth = cw * 0.80;
+                const maxHeight = ch * 0.80;
+
+                let size = ch * 0.25;
                 timeEl.style.fontSize = size + 'px';
 
                 let guard = 100;
@@ -229,14 +232,20 @@
             });
         }
 
-        window.addEventListener('resize', () => { applyViewportSize(); layout(); });
-        window.addEventListener('orientationchange', () => setTimeout(() => { applyViewportSize(); layout(); }, 150));
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', () => { applyViewportSize(); layout(); });
-            window.visualViewport.addEventListener('scroll', () => { applyViewportSize(); layout(); });
+        function refresh() {
+            // Двойной requestAnimationFrame, чтобы размеры успели примениться
+            // после поворота/изменения адресной строки
+            requestAnimationFrame(() => requestAnimationFrame(layout));
         }
-        window.addEventListener('load', () => { applyViewportSize(); layout(); });
-        layout();
+
+        window.addEventListener('resize', refresh);
+        window.addEventListener('orientationchange', () => setTimeout(refresh, 200));
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', refresh);
+            window.visualViewport.addEventListener('scroll', refresh);
+        }
+        window.addEventListener('load', refresh);
+        refresh();
 
         document.addEventListener('contextmenu', (e) => e.preventDefault());
         document.addEventListener('touchmove', (e) => {
