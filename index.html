@@ -21,7 +21,6 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
-        /* Фиксированный слой на весь экран — не зависит от адресной строки */
         #app {
             position: fixed;
             inset: 0;
@@ -30,13 +29,11 @@
             justify-content: center;
             gap: 2vmin;
             padding: 1vmin;
-            /* Портрет: круги друг над другом */
             flex-direction: column;
         }
 
         @media (orientation: landscape) {
             #app {
-                /* Ландшафт: круги в ряд */
                 flex-direction: row;
             }
         }
@@ -101,9 +98,8 @@
         class Stopwatch {
             constructor(element) {
                 this.el = element;
-                this.running = false;
+                this.state = 0; // 0 = ждёт старта, 1 = идёт визуально, 2 = остановлен
                 this.startTime = 0;
-                this.elapsed = 0;
                 this.rafId = null;
                 this.render = this.render.bind(this);
             }
@@ -116,26 +112,31 @@
             }
 
             render() {
+                if (this.state !== 1) return;
                 const now = performance.now();
-                const display = this.elapsed + (this.running ? (now - this.startTime) : 0);
+                const display = now - this.startTime;
                 this.el.textContent = this.format(display);
-                if (this.running) {
-                    this.rafId = requestAnimationFrame(this.render);
-                }
+                this.rafId = requestAnimationFrame(this.render);
             }
 
             tap() {
-                if (!this.running) {
-                    this.elapsed = 0;
+                if (this.state === 0) {
+                    // Первое нажатие: пошёл визуальный отсчёт
                     this.startTime = performance.now();
-                    this.running = true;
+                    this.state = 1;
                     this.el.textContent = '00.00';
                     this.rafId = requestAnimationFrame(this.render);
-                } else {
-                    this.elapsed += performance.now() - this.startTime;
-                    this.running = false;
+                } else if (this.state === 1) {
+                    // Второе нажатие: остановка, фиксируем итоговое время на экране
+                    const finalMs = performance.now() - this.startTime;
                     cancelAnimationFrame(this.rafId);
-                    this.render();
+                    this.state = 2;
+                    this.el.textContent = this.format(finalMs);
+                } else {
+                    // Третье нажатие: обнуляем и ждём следующего старта.
+                    // Таймер не идёт — просто показываем 00.00.
+                    this.state = 0;
+                    this.el.textContent = '00.00';
                 }
             }
         }
@@ -153,7 +154,6 @@
             redSW.tap();
         });
 
-        // Реальные размеры видимой области (учитывают адресную строку, панели, чёлку)
         function getViewport() {
             const vv = window.visualViewport;
             const w = vv ? vv.width : window.innerWidth;
@@ -163,8 +163,6 @@
             return { w, h, offsetTop, offsetLeft };
         }
 
-        // Прибиваем #app к видимой области вручную — это единственный надёжный
-        // способ центрировать при любых состояниях адресной строки и поворотах
         function layout() {
             const { w, h, offsetTop, offsetLeft } = getViewport();
 
@@ -181,18 +179,13 @@
 
             let size;
             if (isLandscape) {
-                // Круги в ряд: 2 круга + зазор + отступы по бокам должны поместиться в ширину,
-                // и один круг — в высоту
                 size = Math.min((w - pad * 2 - gap) / 2, h - pad * 2);
             } else {
-                // Круги в столбец: 2 круга + зазор + отступы сверху/снизу должны поместиться в высоту,
-                // и один круг — в ширину
                 size = Math.min(w - pad * 2, (h - pad * 2 - gap) / 2);
             }
             size = Math.max(40, Math.floor(size));
 
-            const circles = document.querySelectorAll('.circle');
-            circles.forEach(c => {
+            document.querySelectorAll('.circle').forEach(c => {
                 c.style.width = size + 'px';
                 c.style.height = size + 'px';
             });
@@ -233,8 +226,6 @@
         }
 
         function refresh() {
-            // Двойной requestAnimationFrame, чтобы размеры успели примениться
-            // после поворота/изменения адресной строки
             requestAnimationFrame(() => requestAnimationFrame(layout));
         }
 
