@@ -23,7 +23,7 @@
 
         body {
             display: flex;
-            /* По умолчанию (портрет): круги друг над другом — сверху и снизу */
+            /* Портрет: круги сверху и снизу */
             flex-direction: column;
             align-items: center;
             justify-content: center;
@@ -31,7 +31,6 @@
             padding: 1vmin;
         }
 
-        /* Ландшафт (телефон перевёрнут): круги слева и справа */
         @media (orientation: landscape) {
             body {
                 flex-direction: row;
@@ -39,7 +38,7 @@
         }
 
         .circle {
-            /* Портрет: диаметр ограничен и шириной (один круг в строке), и высотой (два круга в столбце) */
+            /* Портрет: диаметр ограничен шириной и половиной высоты */
             --size: min(96vw, 48vh);
             width: var(--size);
             height: var(--size);
@@ -55,9 +54,9 @@
             flex: 0 0 auto;
         }
 
-        /* Ландшафт: диаметр ограничен высотой (один круг в строке) и шириной (два круга в ряд) */
         @media (orientation: landscape) {
             .circle {
+                /* Ландшафт: диаметр ограничен высотой и половиной ширины */
                 --size: min(48vw, 96vh);
             }
         }
@@ -104,6 +103,17 @@
     </div>
 
     <script>
+        // Используем visualViewport для учёта реального размера видимой области
+        // (на мобильных адресная строка и панели браузера меняют высоту)
+        function applyViewportSize() {
+            const vv = window.visualViewport;
+            const w = vv ? vv.width : window.innerWidth;
+            const h = vv ? vv.height : window.innerHeight;
+            document.documentElement.style.setProperty('--vw', w + 'px');
+            document.documentElement.style.setProperty('--vh', h + 'px');
+        }
+        applyViewportSize();
+
         class Stopwatch {
             constructor(element) {
                 this.el = element;
@@ -132,14 +142,12 @@
 
             tap() {
                 if (!this.running) {
-                    // Старт (в том числе новый старт с нуля после остановки)
                     this.elapsed = 0;
                     this.startTime = performance.now();
                     this.running = true;
                     this.el.textContent = '00.00';
                     this.rafId = requestAnimationFrame(this.render);
                 } else {
-                    // Стоп
                     this.elapsed += performance.now() - this.startTime;
                     this.running = false;
                     cancelAnimationFrame(this.rafId);
@@ -160,6 +168,38 @@
             e.preventDefault();
             redSW.tap();
         });
+
+        // Размер кругов считаем от реальных размеров видимой области.
+        // Портрет: диаметр = min(ширина*0.96, (высота - зазор)*0.5)
+        // Ландшафт: диаметр = min((ширина - зазор)*0.5, высота*0.96)
+        function layout() {
+            const vw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vw')) || window.innerWidth;
+            const vh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vh')) || window.innerHeight;
+            const isLandscape = vw >= vh;
+
+            // Отступы: 1vmin с каждой стороны (8px минимум) + зазор между кругами 2vmin
+            const pad = Math.max(8, Math.min(vw, vh) * 0.01);
+            const gap = Math.max(8, Math.min(vw, vh) * 0.02);
+
+            let size;
+            if (isLandscape) {
+                size = Math.min((vw - pad * 2 - gap) / 2, vh - pad * 2);
+            } else {
+                size = Math.min(vw - pad * 2, (vh - pad * 2 - gap) / 2);
+            }
+            size = Math.max(40, Math.floor(size));
+
+            document.querySelectorAll('.circle').forEach(c => {
+                c.style.width = size + 'px';
+                c.style.height = size + 'px';
+            });
+
+            // Выравнивание по центру именно видимой области
+            document.body.style.width = vw + 'px';
+            document.body.style.height = vh + 'px';
+
+            fitText();
+        }
 
         function fitText() {
             document.querySelectorAll('.circle').forEach(circle => {
@@ -189,14 +229,14 @@
             });
         }
 
-        window.addEventListener('resize', fitText);
-        window.addEventListener('orientationchange', () => setTimeout(fitText, 100));
-        window.addEventListener('load', fitText);
-        if (window.ResizeObserver) {
-            const ro = new ResizeObserver(fitText);
-            document.querySelectorAll('.circle').forEach(c => ro.observe(c));
+        window.addEventListener('resize', () => { applyViewportSize(); layout(); });
+        window.addEventListener('orientationchange', () => setTimeout(() => { applyViewportSize(); layout(); }, 150));
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => { applyViewportSize(); layout(); });
+            window.visualViewport.addEventListener('scroll', () => { applyViewportSize(); layout(); });
         }
-        fitText();
+        window.addEventListener('load', () => { applyViewportSize(); layout(); });
+        layout();
 
         document.addEventListener('contextmenu', (e) => e.preventDefault());
         document.addEventListener('touchmove', (e) => {
